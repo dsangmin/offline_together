@@ -1,0 +1,25 @@
+/* STATISTICS */
+const averageStudyTime=$('averageStudyTime'),averageSleepTime=$('averageSleepTime'),weeklyTodoRate=$('weeklyTodoRate');let studyChartInstance=null,sleepChartInstance=null,subjectChartInstance=null;
+function getRecentDates(days=7){const dates=[],[year,month,day]=koreaToday().split('-').map(Number),today=new Date(Date.UTC(year,month-1,day));for(let i=days-1;i>=0;i--){const date=new Date(today);date.setUTCDate(today.getUTCDate()-i);dates.push(date.toISOString().slice(0,10));}return dates;}
+function formatChartDate(dateString){const [,month,day]=dateString.split('-');return `${Number(month)}/${Number(day)}`;}
+function getStudySecondsByDate(date){const records=Array.isArray(studyData[date])?studyData[date]:[];return records.reduce((total,record)=>total+Number(record.seconds||0),0);}
+function secondsToHours(seconds){return Number((seconds/3600).toFixed(2));}
+function calculateAverageStudyTime(dates){return Math.round(dates.reduce((total,date)=>total+getStudySecondsByDate(date),0)/dates.length);}
+function calculateAverageSleep(dates){const records=dates.map(date=>sleepData[date]).filter(record=>validObject(record)&&Number.isFinite(Number(record.durationMinutes)));if(!records.length)return null;return Math.round(records.reduce((total,record)=>total+Number(record.durationMinutes||0),0)/records.length);}
+function calculateWeeklyTodoRate(dates){let total=0,completed=0;dates.forEach(date=>{const todos=Array.isArray(todoData[date])?todoData[date]:[];total+=todos.length;completed+=todos.filter(todo=>todo.completed).length;});return total===0?0:Math.round(completed/total*100);}
+function getWeeklySubjectTimes(dates){const records=dates.flatMap(date=>Array.isArray(studyData[date])?studyData[date]:[]);return getSubjectStudyTimes(records);}
+function updateStatSummary(dates){averageStudyTime.textContent=formatStudyDuration(calculateAverageStudyTime(dates));const sleepAverage=calculateAverageSleep(dates);averageSleepTime.textContent=sleepAverage===null?'기록 없음':formatSleepDuration(sleepAverage);weeklyTodoRate.textContent=`${calculateWeeklyTodoRate(dates)}%`;}
+function renderStudyChart(dates){const canvas=$('studyChart'),values=dates.map(date=>secondsToHours(getStudySecondsByDate(date)));if(studyChartInstance)studyChartInstance.destroy();studyChartInstance=new Chart(canvas,{type:'bar',data:{labels:dates.map(formatChartDate),datasets:[{label:'공부시간',data:values,backgroundColor:'#174d3c',borderRadius:7}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'시간'}}}}});}
+function renderSleepChart(dates){const canvas=$('sleepChart'),values=dates.map(date=>{const record=sleepData[date];return validObject(record)?Number((Number(record.durationMinutes||0)/60).toFixed(2)):null;});if(sleepChartInstance)sleepChartInstance.destroy();sleepChartInstance=new Chart(canvas,{type:'bar',data:{labels:dates.map(formatChartDate),datasets:[{label:'수면시간',data:values,backgroundColor:'#678bc0',borderRadius:7}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'시간'}}}}});}
+function renderSubjectChart(dates){const canvas=$('subjectChart'),subjectTimes=getWeeklySubjectTimes(dates),labels=Object.keys(subjectTimes),values=Object.values(subjectTimes).map(secondsToHours),total=values.reduce((sum,value)=>sum+value,0),chartValues=total===0?[1]:values,chartLabels=total===0?['기록 없음']:labels,colors=total===0?['#e4e9e6']:['#174d3c','#4d7f69','#678bc0','#dc9b37','#9b8bb5'];if(subjectChartInstance)subjectChartInstance.destroy();subjectChartInstance=new Chart(canvas,{type:'doughnut',data:{labels:chartLabels,datasets:[{data:chartValues,backgroundColor:colors,borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'68%',plugins:{legend:{position:'bottom'}}}});}
+function updateStatistics(){const dates=getRecentDates(7);updateStatSummary(dates);if(typeof Chart==='undefined'){console.error('Chart.js를 불러오지 못했습니다.');return;}renderStudyChart(dates);renderSleepChart(dates);renderSubjectChart(dates);}
+
+/* MY PAGE */
+function getAllStudySeconds(){return Object.values(studyData).filter(Array.isArray).flat().reduce((total,record)=>total+Number(record.seconds||0),0);}
+function getAllCompletedTodoCount(){return Object.values(todoData).filter(Array.isArray).flat().filter(todo=>todo.completed).length;}
+function getSleepRecordCount(){return Object.values(sleepData).filter(validObject).length;}
+function updateMyPage(){$('myTotalStudy').textContent=formatStudyDuration(getAllStudySeconds());$('myCompletedTodos').textContent=`${getAllCompletedTodoCount()}개`;$('mySleepDays').textContent=`${getSleepRecordCount()}일`;}
+$('resetDataButton').addEventListener('click',()=>{if(!confirm('저장된 할 일, 공부시간, 수면 기록을 모두 초기화할까요?'))return;['todoData','studyData','sleepData','activeStudy'].forEach(key=>localStorage.removeItem(key));location.reload();});
+
+/* INITIALIZE */
+updateTodayDisplay();renderTodos();updateStudySummary();restoreActiveStudy();updateSleepUI();updateMyPage();$('dateInput').value=koreaToday();fetchMeals();showPage('home');
